@@ -31,6 +31,18 @@ Puppet::Type.newtype(:vcsrepo) do
   feature :multiple_remotes,
           "The repository tracks multiple remote repositories"
 
+  feature :configuration,
+          "The configuration directory to use"
+
+  feature :cvs_rsh,
+          "The provider understands the CVS_RSH environment variable"
+
+  feature :depth,
+          "The provider can do shallow clones"
+
+  feature :p4config,
+          "The provider understands Perforce Configuration"
+
   ensurable do
     attr_accessor :latest
 
@@ -38,16 +50,16 @@ Puppet::Type.newtype(:vcsrepo) do
       @should ||= []
 
       case should
-        when :present
-          return true unless [:absent, :purged, :held].include?(is)
-        when :latest
-          if is == :latest
-            return true
-          else
-            return false
-          end
-		when :bare
-		  return is == :bare
+      when :present
+        return true unless [:absent, :purged, :held].include?(is)
+      when :latest
+        if is == :latest
+          return true
+        else
+          return false
+        end
+      when :bare
+        return is == :bare
       end
     end
 
@@ -57,7 +69,7 @@ Puppet::Type.newtype(:vcsrepo) do
     end
 
     newvalue :bare, :required_features => [:bare_repositories] do
-	  if !provider.exists?
+      if !provider.exists?
         provider.create
       end
     end
@@ -67,7 +79,7 @@ Puppet::Type.newtype(:vcsrepo) do
     end
 
     newvalue :latest, :required_features => [:reference_tracking] do
-      if provider.exists?
+      if provider.exists? && !@resource.value(:force)
         if provider.respond_to?(:update_references)
           provider.update_references
         end
@@ -88,6 +100,16 @@ Puppet::Type.newtype(:vcsrepo) do
       prov = @resource.provider
       if prov
         if prov.working_copy_exists?
+          if @resource.value(:force)
+            if noop
+              notice "Noop Mode - Would have deleted repository and re-created from latest"
+            else
+              notice "Deleting current repository before recloning"
+              prov.destroy
+              notice "Create repository from latest"
+              prov.create
+            end
+          end
           (@should.include?(:latest) && prov.latest?) ? :latest : :present
         elsif prov.class.feature?(:bare_repositories) and prov.bare_exists?
           :bare
@@ -177,4 +199,23 @@ Puppet::Type.newtype(:vcsrepo) do
     defaultto "origin"
   end
 
+  newparam :configuration, :required_features => [:configuration]  do
+    desc "The configuration directory to use"
+  end
+
+  newparam :cvs_rsh, :required_features => [:cvs_rsh] do
+    desc "The value to be used for the CVS_RSH environment variable."
+  end
+
+  newparam :depth, :required_features => [:depth] do
+    desc "The value to be used to do a shallow clone."
+  end
+
+  newparam :p4config, :required_features => [:p4config] do
+    desc "The Perforce P4CONFIG environment."
+  end
+
+  autorequire(:package) do
+    ['git', 'git-core']
+  end
 end
